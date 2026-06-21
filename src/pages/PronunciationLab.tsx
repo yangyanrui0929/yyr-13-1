@@ -346,7 +346,7 @@ export const PronunciationLab: React.FC = () => {
                             )}
                             style={{
                               backgroundColor: isActive ? `${tone.color}20` : 'white',
-                              ringColor: tone.color,
+                              boxShadow: isActive ? `0 0 0 4px white, 0 0 0 8px ${tone.color}` : undefined,
                             }}
                           >
                             {isActive && (

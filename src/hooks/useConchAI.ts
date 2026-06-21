@@ -3,6 +3,11 @@ import { Student, Sentence, Root, Tone, UnderstandingResult, MisunderstandingAna
 import { calculateUnderstanding, analyzeMisunderstanding } from '@/utils/conchAI';
 import { useAppStore } from '@/store';
 
+export interface ProcessResult {
+  result: UnderstandingResult;
+  analysis: MisunderstandingAnalysis | null;
+}
+
 export const useConchAI = () => {
   const { roots, tones } = useAppStore();
   const [isProcessing, setIsProcessing] = useState(false);
@@ -12,7 +17,7 @@ export const useConchAI = () => {
   const processSentence = useCallback(async (
     student: Student,
     sentence: Sentence
-  ): Promise<UnderstandingResult> => {
+  ): Promise<ProcessResult> => {
     setIsProcessing(true);
     setLastResult(null);
     setLastAnalysis(null);
@@ -22,13 +27,14 @@ export const useConchAI = () => {
     const result = calculateUnderstanding(student, sentence, roots, tones);
     setLastResult(result);
 
+    let analysis: MisunderstandingAnalysis | null = null;
     if (!result.understood) {
-      const analysis = analyzeMisunderstanding(student, sentence, roots);
+      analysis = analyzeMisunderstanding(student, sentence, roots);
       setLastAnalysis(analysis);
     }
 
     setIsProcessing(false);
-    return result;
+    return { result, analysis };
   }, [roots, tones]);
 
   const getAnalysis = useCallback((

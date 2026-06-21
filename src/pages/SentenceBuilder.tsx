@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { 
@@ -59,7 +59,14 @@ export const SentenceBuilder: React.FC = () => {
     setCurrentLesson,
     currentStudent,
     setCurrentStudent,
+    setCurrentSentence,
   } = useAppStore();
+
+  useEffect(() => {
+    if (!currentStudent && students.length > 0) {
+      setCurrentStudent(students[0].id);
+    }
+  }, [currentStudent, students, setCurrentStudent]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<RootCategory | 'all'>('all');
@@ -134,8 +141,7 @@ export const SentenceBuilder: React.FC = () => {
       applyToneToPinyin
     );
     
-    const sentenceId = `temp_${Date.now()}`;
-    addSentence({
+    const sentenceId = addSentence({
       rootIds: builderState.selectedRoots,
       tones: builderState.selectedTones,
       gestureIds: builderState.selectedGestures,
@@ -143,10 +149,13 @@ export const SentenceBuilder: React.FC = () => {
       expectedAction: expectedAction || `执行"${characters}"对应的动作`,
     });
     
+    setCurrentSentence(sentenceId);
+    
     if (currentStudent) {
       navigate('/classroom');
     } else {
-      setCurrentStudent(students[0]?.id || null);
+      const targetStudent = students[0]?.id || null;
+      setCurrentStudent(targetStudent);
       navigate('/classroom');
     }
   };

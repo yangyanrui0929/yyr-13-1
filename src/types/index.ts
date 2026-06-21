@@ -161,6 +161,7 @@ export interface AppState {
   progress: Progress[];
   currentLesson: string | null;
   currentStudent: string | null;
+  currentSentence: string | null;
   builderState: BuilderState;
 }
 

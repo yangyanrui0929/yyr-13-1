@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Volume2, 
@@ -34,7 +34,18 @@ import { cn } from '@/lib/utils';
 import { Student, Sentence, UnderstandingResult } from '@/types';
 
 export const Classroom: React.FC = () => {
-  const { students, sentences, roots, gestures, addClassRecord, classRecords } = useAppStore();
+  const {
+    students,
+    sentences,
+    roots,
+    gestures,
+    classRecords,
+    currentStudent,
+    currentSentence,
+    setCurrentStudent,
+    setCurrentSentence,
+    processClassResult,
+  } = useAppStore();
   const { speak, isSpeaking, waveform } = useSpeech();
   const { processSentence, isProcessing, lastResult, lastAnalysis, reset } = useConchAI();
 
@@ -43,8 +54,29 @@ export const Classroom: React.FC = () => {
   const [attempts, setAttempts] = useState(0);
   const [showCelebration, setShowCelebration] = useState(false);
 
+  useEffect(() => {
+    if (currentStudent && students.length > 0) {
+      const student = students.find(s => s.id === currentStudent);
+      if (student) setSelectedStudent(student);
+    } else if (students.length > 0) {
+      setSelectedStudent(students[0]);
+      setCurrentStudent(students[0].id);
+    }
+  }, [currentStudent, students, setCurrentStudent]);
+
+  useEffect(() => {
+    if (currentSentence && sentences.length > 0) {
+      const sentence = sentences.find(s => s.id === currentSentence);
+      if (sentence) {
+        setSelectedSentence(sentence);
+        setCurrentSentence(null);
+      }
+    }
+  }, [currentSentence, sentences, setCurrentSentence]);
+
   const handleSelectStudent = (student: Student) => {
     setSelectedStudent(student);
+    setCurrentStudent(student.id);
     reset();
     setAttempts(0);
     setShowCelebration(false);
@@ -68,17 +100,16 @@ export const Classroom: React.FC = () => {
     if (!selectedStudent || !selectedSentence) return;
 
     setAttempts(prev => prev + 1);
-    const result = await processSentence(selectedStudent, selectedSentence);
+    const { result, analysis } = await processSentence(selectedStudent, selectedSentence);
+    const currentAttempts = attempts + 1;
 
-    addClassRecord({
-      lessonId: 'classroom_' + Date.now(),
-      studentId: selectedStudent.id,
-      sentenceId: selectedSentence.id,
-      understood: result.understood,
-      misunderstanding: result.misunderstanding,
-      correction: lastAnalysis?.correctionMethod || '',
-      attempts: attempts + 1,
-    });
+    processClassResult(
+      selectedStudent.id,
+      selectedSentence.id,
+      result,
+      analysis,
+      currentAttempts
+    );
 
     if (result.understood) {
       setShowCelebration(true);

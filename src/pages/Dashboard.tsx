@@ -29,8 +29,10 @@ export const Dashboard: React.FC = () => {
   const totalLessons = lessons.length;
   const completedLessons = lessons.filter(l => l.status === 'completed').length;
   const totalRecords = classRecords.length;
-  const avgAccuracy = progress.length > 0 
-    ? Math.round(progress.reduce((sum, p) => sum + p.overallAccuracy, 0) / progress.length * 100)
+  
+  const understoodRecords = classRecords.filter(r => r.understood).length;
+  const avgAccuracy = totalRecords > 0
+    ? Math.round((understoodRecords / totalRecords) * 100)
     : 0;
   
   const unlockedAchievements = progress.reduce((sum, p) => 

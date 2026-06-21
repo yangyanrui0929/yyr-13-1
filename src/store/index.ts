@@ -21,6 +21,8 @@ import { initialGrammarRules } from '@/data/grammar';
 import { initialStudents } from '@/data/students';
 import { initialSentences } from '@/data/sentences';
 import { generateId } from '@/utils/storage';
+import { updateProgress as calculateProgressUpdate } from '@/utils/conchAI';
+import { UnderstandingResult, MisunderstandingAnalysis } from '@/types';
 
 interface AppStore extends AppState {
   setRoots: (roots: Root[]) => void;
@@ -28,7 +30,7 @@ interface AppStore extends AppState {
   updateRoot: (id: string, updates: Partial<Root>) => void;
   deleteRoot: (id: string) => void;
   
-  addSentence: (sentence: Omit<Sentence, 'id' | 'createdAt'>) => void;
+  addSentence: (sentence: Omit<Sentence, 'id' | 'createdAt'>) => string;
   updateSentence: (id: string, updates: Partial<Sentence>) => void;
   deleteSentence: (id: string) => void;
   
@@ -46,6 +48,7 @@ interface AppStore extends AppState {
   
   setCurrentLesson: (lessonId: string | null) => void;
   setCurrentStudent: (studentId: string | null) => void;
+  setCurrentSentence: (sentenceId: string | null) => void;
   
   setBuilderState: (state: Partial<BuilderState>) => void;
   resetBuilderState: () => void;
@@ -58,6 +61,14 @@ interface AppStore extends AppState {
   
   addGestureToBuilder: (gestureId: string) => void;
   removeGestureFromBuilder: (gestureId: string) => void;
+  
+  processClassResult: (
+    studentId: string,
+    sentenceId: string,
+    result: UnderstandingResult,
+    analysis: MisunderstandingAnalysis | null,
+    attempts: number
+  ) => void;
   
   resetAllData: () => void;
 }
@@ -151,6 +162,7 @@ export const useAppStore = create<AppStore>()(
       progress: initialProgress,
       currentLesson: null,
       currentStudent: null,
+      currentSentence: null,
       builderState: initialBuilderState,
 
       setRoots: (roots) => set({ roots }),
@@ -167,12 +179,16 @@ export const useAppStore = create<AppStore>()(
         roots: state.roots.filter(r => r.id !== id),
       })),
 
-      addSentence: (sentence) => set((state) => ({
-        sentences: [
-          ...state.sentences,
-          { ...sentence, id: generateId('s'), createdAt: new Date().toISOString() },
-        ],
-      })),
+      addSentence: (sentence) => {
+        const newId = generateId('s');
+        set((state) => ({
+          sentences: [
+            ...state.sentences,
+            { ...sentence, id: newId, createdAt: new Date().toISOString() },
+          ],
+        }));
+        return newId;
+      },
       
       updateSentence: (id, updates) => set((state) => ({
         sentences: state.sentences.map(s => s.id === id ? { ...s, ...updates } : s),
@@ -224,6 +240,74 @@ export const useAppStore = create<AppStore>()(
 
       setCurrentLesson: (lessonId) => set({ currentLesson: lessonId }),
       setCurrentStudent: (studentId) => set({ currentStudent: studentId }),
+      setCurrentSentence: (sentenceId) => set({ currentSentence: sentenceId }),
+
+      processClassResult: (studentId, sentenceId, result, analysis, attempts) => {
+        const state = get();
+        const student = state.students.find(s => s.id === studentId);
+        const sentence = state.sentences.find(s => s.id === sentenceId);
+        const currentProgress = state.progress.find(p => p.studentId === studentId);
+        const roots = state.roots;
+        
+        if (!student || !sentence || !currentProgress) return;
+
+        const classRecord: Omit<ClassRecord, 'id' | 'timestamp'> = {
+          lessonId: 'classroom_' + Date.now(),
+          studentId,
+          sentenceId,
+          understood: result.understood,
+          misunderstanding: result.misunderstanding,
+          correction: analysis?.correctionMethod || '',
+          attempts,
+        };
+
+        const newRecord: ClassRecord = {
+          ...classRecord,
+          id: generateId('cr'),
+          timestamp: new Date().toISOString(),
+        };
+
+        const updateResult = calculateProgressUpdate(
+          student,
+          newRecord,
+          currentProgress,
+          sentence,
+          roots
+        );
+
+        set((state) => ({
+          classRecords: [...state.classRecords, newRecord],
+          students: state.students.map(s =>
+            s.id === studentId ? updateResult.updatedStudent : s
+          ),
+          progress: state.progress.map(p =>
+            p.studentId === studentId ? updateResult.updatedProgress : p
+          ),
+        }));
+
+        if (!result.understood && analysis) {
+          const existingCase = state.errorCases.find(
+            e => e.pattern === analysis.rootCause
+          );
+          if (!existingCase) {
+            get().addErrorCase({
+              pattern: analysis.rootCause,
+              description: analysis.rootCause,
+              rootCause: analysis.mistakenRoot || '',
+              correctionMethod: analysis.correctionMethod,
+              occurrenceCount: 1,
+              relatedRecordIds: [newRecord.id],
+            });
+          } else {
+            get().updateErrorCase(existingCase.id, {
+              occurrenceCount: existingCase.occurrenceCount + 1,
+              relatedRecordIds: existingCase.relatedRecordIds.includes(newRecord.id)
+                ? existingCase.relatedRecordIds
+                : [...existingCase.relatedRecordIds, newRecord.id],
+            });
+          }
+        }
+      },
 
       setBuilderState: (state) => set((prev) => ({
         builderState: { ...prev.builderState, ...state },
